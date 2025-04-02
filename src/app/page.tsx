@@ -105,7 +105,7 @@ export default function Home() {
 
   const translateText = async (text: string): Promise<string> => {
     try {
-      const response = await fetch('/api/translate', {  // Changed to use our own API endpoint
+      const response = await fetch('/api/translate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +126,8 @@ export default function Home() {
       return data.translatedText;
     } catch (error) {
       console.error('Translation error:', error);
-      setError(`Translation failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(`Translation failed: ${errorMessage}`);
       return text; // Return original text on error
     }
   };
@@ -237,7 +238,8 @@ export default function Home() {
 
         } catch (error) {
           console.error('Processing error:', error);
-          setError(`Failed to process speech: ${error.message}`);
+          const errorMessage = error instanceof Error ? error.message : 'Speech processing failed';
+          setError(`Failed to process speech: ${errorMessage}`);
         } finally {
           setAudioChunks([]); // Clear the chunks after processing
           setIsProcessing(false); // Hide loading indicator
@@ -277,14 +279,12 @@ export default function Home() {
         throw new Error(errorData.error || "Failed to generate resume");
       }
 
-      // Get the PDF blob directly from the response
       const pdfBlob = await response.blob();
       const url = window.URL.createObjectURL(pdfBlob);
-
-      // Handle the PDF URL (e.g., download, display)
       console.log('Resume URL:', url);
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate resume';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -323,7 +323,8 @@ export default function Home() {
       await audio.play();
     } catch (error) {
       console.error('Error playing audio:', error);
-      setError('Failed to play audio');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to play audio';
+      setError(errorMessage);
     }
   };
 
