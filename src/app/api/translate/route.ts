@@ -39,14 +39,17 @@ export async function POST(request: Request) {
     console.log('Translation result:', translation); // Debug log
 
     return NextResponse.json({ translatedText: translation });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Translation error:', error);
-    // Return more detailed error information
+    // Add type checking for the error object
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
     return NextResponse.json(
       { 
         error: 'Failed to translate text',
-        details: error.message,
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        details: errorMessage,
+        stack: process.env.NODE_ENV === 'development' ? errorStack : undefined
       },
       { status: 500 }
     );
