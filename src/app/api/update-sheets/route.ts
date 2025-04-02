@@ -1,7 +1,5 @@
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-
 
 // Initialize Google Sheets client
 const auth = new google.auth.GoogleAuth({

@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
 import { SpeechClient } from '@google-cloud/speech';
-import fs from 'fs';
-
-const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS
-  ? JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'))
-  : {};
 
 const client = new SpeechClient({
-  credentials: credentials,
+  credentials: {
+    client_email: process.env.GCP_SERVICE_ACCOUNT_EMAIL,
+    private_key: process.env.GCP_PRIVATE_KEY,
+  },
 });
 
 export async function POST(req: Request) {

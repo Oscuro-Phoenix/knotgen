@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { v2 } from '@google-cloud/translate';
-import fs from 'fs';
 const { Translate } = v2;
 
 const translate = new Translate({
