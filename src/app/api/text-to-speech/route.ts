@@ -25,7 +25,7 @@ export async function POST(req: Request) {
         name: 'hi-IN-Wavenet-A',
       },
       audioConfig: {
-        audioEncoding: 'MP3',
+        audioEncoding: 'MP3' as const,
         pitch: 0,
         speakingRate: 1,
       },
