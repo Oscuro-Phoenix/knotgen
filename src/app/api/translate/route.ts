@@ -3,14 +3,11 @@ import { v2 } from '@google-cloud/translate';
 import fs from 'fs';
 const { Translate } = v2;
 
-// Initialize with credentials from file
-const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS
-  ? JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'))
-  : {};
-
 const translate = new Translate({
-  projectId: credentials.project_id,
-  credentials: credentials,
+  credentials: {
+    client_email: process.env.GCP_SERVICE_ACCOUNT_EMAIL2,
+    private_key: process.env.GCP_PRIVATE_KEY2,
+  },
 });
 
 export async function POST(request: Request) {

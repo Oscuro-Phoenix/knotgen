@@ -2,14 +2,13 @@ import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 
-// Initialize credentials from file
-const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS2
-  ? JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS2, 'utf8'))
-  : {};
 
 // Initialize Google Sheets client
 const auth = new google.auth.GoogleAuth({
-  credentials: credentials,
+  credentials: {
+    client_email: process.env.GCP_SERVICE_ACCOUNT_EMAIL,
+    private_key: process.env.GCP_PRIVATE_KEY,
+  },
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 

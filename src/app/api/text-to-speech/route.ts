@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import fs from 'fs';
 
-const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS
-  ? JSON.parse(fs.readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'))
-  : {};
+
 
 const client = new TextToSpeechClient({
-  credentials: credentials,
+    credentials: {
+        client_email: process.env.GCP_SERVICE_ACCOUNT_EMAIL2,
+        private_key: process.env.GCP_PRIVATE_KEY2,
+      },
 });
 
 export async function POST(req: Request) {
