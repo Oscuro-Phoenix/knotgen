@@ -64,15 +64,13 @@ Ensure the response is in valid JSON format. Focus on practical skills, certific
     const resumeContent = Array.isArray(output) ? output.join('') : output;
     
     // Clean up the response to extract only the JSON part
-    let cleanedContent = resumeContent;
-    if (typeof cleanedContent === 'string') {
-      // Find the first '{' and last '}' to extract just the JSON portion
-      const startIndex = cleanedContent.indexOf('{');
-      const endIndex = cleanedContent.lastIndexOf('}');
-      
-      if (startIndex !== -1 && endIndex !== -1) {
-        cleanedContent = cleanedContent.slice(startIndex, endIndex + 1);
-      }
+    let cleanedContent = String(resumeContent); // Convert to string explicitly
+    // Find the first '{' and last '}' to extract just the JSON portion
+    const startIndex = cleanedContent.indexOf('{');
+    const endIndex = cleanedContent.lastIndexOf('}');
+    
+    if (startIndex !== -1 && endIndex !== -1) {
+      cleanedContent = cleanedContent.slice(startIndex, endIndex + 1);
     }
 
     // Now parse the cleaned JSON

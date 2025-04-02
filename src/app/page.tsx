@@ -468,7 +468,7 @@ export default function Home() {
                         <span>Generating...</span>
                       </div>
                     ) : (
-                      "Generate Resume"
+                      "Generate Resume?"
                     )}
                   </button> }
                 </form>
