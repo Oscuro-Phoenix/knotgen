@@ -31,8 +31,8 @@ export async function POST(req: Request) {
       },
     };
 
-    const [response] = await client.synthesizeSpeech(request);
-    const audioContent = response.audioContent;
+    const response = await client.synthesizeSpeech(request);
+    const audioContent = response[0].audioContent;
 
     if (!audioContent) {
       throw new Error('No audio content generated');
