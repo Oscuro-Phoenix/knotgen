@@ -450,7 +450,7 @@ export default function Home() {
                       readOnly
                     />
                   </div>
-                  {/* <button
+                  { <button
                     type="submit"
                     disabled={loading}
                     className="w-full sm:w-auto px-8 py-4 bg-purple-500 hover:bg-purple-600 text-white 
@@ -470,7 +470,7 @@ export default function Home() {
                     ) : (
                       "Generate Resume"
                     )}
-                  </button> */}
+                  </button> }
                 </form>
               </div>
             </div>
