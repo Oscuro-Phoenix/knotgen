@@ -28,7 +28,6 @@ export default function Home() {
   const [translatedQuestions, setTranslatedQuestions] = useState<string[]>([]);
   const [step, setStep] = useState<'language-selection' | 'questionnaire'>('language-selection');
   const [detectedLanguage, setDetectedLanguage] = useState<string>('');
-  const [isDetecting, setIsDetecting] = useState(false);
 
   const languages: Array<{ code: string; name: string; label: string }> = [
     { code: 'bn-IN', name: 'বাংলা', label: 'Bengali' },
@@ -351,7 +350,7 @@ export default function Home() {
       return;
     }
 
-    setIsDetecting(true);
+    setIsProcessing(true);
     setAudioChunks([]);
     
     return new Promise<void>((resolve) => {
@@ -414,7 +413,7 @@ export default function Home() {
         } finally {
           currentRecordingChunks = [];
           setAudioChunks([]);
-          setIsDetecting(false);
+          setIsProcessing(false);
           resolve();
         }
       }, { once: true });
@@ -497,10 +496,11 @@ export default function Home() {
                   <button
                     key={lang.code}
                     onClick={() => selectLanguage(lang.code)}
-                    className="flex flex-col items-center justify-center p-8 rounded-xl
+                    disabled={isProcessing}
+                    className={`flex flex-col items-center justify-center p-8 rounded-xl
                       bg-gray-700/30 hover:bg-purple-500/30 transition-all duration-200
                       border border-gray-600/50 hover:border-purple-500/50
-                      group"
+                      group disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     <span className="text-4xl font-bold text-white mb-3">{lang.name}</span>
                     <span className="text-lg text-purple-200/80 group-hover:text-purple-100">{lang.label}</span>
