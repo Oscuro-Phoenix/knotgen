@@ -12,7 +12,7 @@ export default function Home() {
   ];
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [answers, setAnswers] = useState({
+  const [answers, setAnswers] = useState<Record<string, string>>({
     name: '',
     education: '',
     age: '',
@@ -20,13 +20,26 @@ export default function Home() {
     pastJobs: ''
   });
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [allQuestionsAnswered, setAllQuestionsAnswered] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [translatedQuestions, setTranslatedQuestions] = useState<string[]>([]);
+  const [step, setStep] = useState<'language-selection' | 'questionnaire'>('language-selection');
+  const [detectedLanguage, setDetectedLanguage] = useState<string>('');
+  const [isDetecting, setIsDetecting] = useState(false);
+
+  const languages: Array<{ code: string; name: string; label: string }> = [
+    { code: 'bn-IN', name: 'বাংলা', label: 'Bengali' },
+    { code: 'hi-IN', name: 'हिंदी', label: 'Hindi' },
+    { code: 'ml-IN', name: 'മലയാളം', label: 'Malayalam' },
+  ];
+
+  const selectLanguage = (languageCode: string) => {
+    setDetectedLanguage(languageCode);
+    setStep('questionnaire');
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -63,7 +76,7 @@ export default function Home() {
               body: JSON.stringify({
                 text: q.label,
                 sourceLang: 'en',
-                targetLang: 'hi',
+                targetLang: detectedLanguage?.split('-')[0] || 'hi',
               }),
             });
             const data = await response.json();
@@ -77,8 +90,10 @@ export default function Home() {
       }
     };
 
-    translateQuestions();
-  }, []);
+    if (detectedLanguage) {
+      translateQuestions();
+    }
+  }, [detectedLanguage]);
 
   const formatText = (text: string, field: string): string => {
     let formatted = text.trim();
@@ -112,7 +127,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           text,
-          sourceLang: 'hi',
+          sourceLang: detectedLanguage?.split('-')[0] || 'hi',
           targetLang: 'en',
         }),
       });
@@ -147,7 +162,7 @@ export default function Home() {
     if (!mediaRecorder) return;
 
     const currentField = questions[currentQuestionIndex].key;
-    setIsProcessing(true); // Show loading indicator
+    setIsProcessing(true);
     
     return new Promise<void>((resolve) => {
       mediaRecorder.addEventListener('dataavailable', (event) => {
@@ -191,7 +206,7 @@ export default function Home() {
             body: JSON.stringify({
               audio: base64Audio,
               encoding: 'WEBM_OPUS',
-              languageCode: 'hi-IN',
+              languageCode: detectedLanguage || 'hi-IN',
             }),
           });
 
@@ -262,7 +277,7 @@ export default function Home() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
+    let isLoading = true;
     setError(null);
 
     try {
@@ -281,12 +296,14 @@ export default function Home() {
 
       const pdfBlob = await response.blob();
       const url = window.URL.createObjectURL(pdfBlob);
-      console.log('Resume URL:', url);
+      
+      // Open PDF in new tab
+      window.open(url, '_blank');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate resume';
       setError(errorMessage);
     } finally {
-      setLoading(false);
+      isLoading = false;
     }
   };
 
@@ -309,7 +326,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           text: currentTranslatedQuestion,
-          languageCode: 'hi-IN',
+          languageCode: detectedLanguage || 'hi-IN',
         }),
       });
 
@@ -328,153 +345,312 @@ export default function Home() {
     }
   };
 
+  const detectLanguage = async () => {
+    if (!mediaRecorder) {
+      setError('Recording is not supported in your browser');
+      return;
+    }
+
+    setIsDetecting(true);
+    setAudioChunks([]);
+    
+    return new Promise<void>((resolve) => {
+      let currentRecordingChunks: Blob[] = [];
+
+      const handleDataAvailable = (event: BlobEvent) => {
+        if (event.data.size > 0) {
+          currentRecordingChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.addEventListener('dataavailable', handleDataAvailable);
+      
+      mediaRecorder.addEventListener('stop', async () => {
+        try {
+          // Remove the event listener
+          mediaRecorder.removeEventListener('dataavailable', handleDataAvailable);
+          
+          if (currentRecordingChunks.length === 0) {
+            throw new Error('No audio data recorded');
+          }
+
+          const audioBlob = new Blob(currentRecordingChunks, { type: 'audio/webm' });
+          console.log('Language detection audio blob size:', audioBlob.size);
+          
+          const reader = new FileReader();
+          const base64Audio = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const base64 = reader.result as string;
+              const base64Data = base64.split(',')[1];
+              resolve(base64Data);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(audioBlob);
+          });
+
+          const response = await fetch('/api/detect-language', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              audio: base64Audio,
+              encoding: 'WEBM_OPUS',
+              sampleRateHertz: 48000,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Language detection failed');
+          }
+
+          const { languageCode } = await response.json();
+          setDetectedLanguage(languageCode);
+          setStep('questionnaire');
+        } catch (error) {
+          console.error('Language detection error:', error);
+          setError(error instanceof Error ? error.message : 'Failed to detect language');
+        } finally {
+          currentRecordingChunks = [];
+          setAudioChunks([]);
+          setIsDetecting(false);
+          resolve();
+        }
+      }, { once: true });
+
+      // Start recording with smaller timeslice
+      mediaRecorder.start(100);
+
+      // Record for 5 seconds then stop
+      setTimeout(() => {
+        if (mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+        }
+      }, 5000);
+    });
+  };
+
+  // Add this function to get a friendly language name
+  const getLanguageName = (code: string): string => {
+    const languageMap: Record<string, string> = {
+      'hi-IN': 'Hindi',
+      'en-US': 'English',
+      'bn-IN': 'Bengali',
+      'ml-IN': 'Malayalam'
+    };
+    return languageMap[code] || code;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-[#0f172a] to-gray-900">
       <div className="max-w-3xl mx-auto p-8">
         <main className="flex flex-col gap-10">
-          <div className="text-center space-y-3">
-            <h1 className="text-4xl font-bold text-white">Employee Portal</h1>
-            <p className="text-purple-200/80 text-lg">Click on listen button and submit your answers</p>
-          </div>
-          
-          {!allQuestionsAnswered ? (
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl shadow-lg shadow-black/20 border border-gray-700/50 p-8 space-y-8">
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-purple-400 uppercase tracking-wide">
-                  Question {currentQuestionIndex + 1} of {questions.length}
-                </p>
-                <h2 className="text-2xl font-semibold text-white">
-                  {questions[currentQuestionIndex].label}
-                </h2>
-                {translatedQuestions[currentQuestionIndex] && (
-                  <p className="text-lg text-purple-200 mt-2">
-                    {translatedQuestions[currentQuestionIndex]}
-                  </p>
-                )}
-                <button
-                  onClick={speakQuestion}
-                  className="mt-4 px-4 py-2 bg-purple-500/20 text-purple-200 rounded-lg 
-                    hover:bg-purple-500/30 transition-colors duration-200 flex items-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                      d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M6.5 8.25h.75a2 2 0 012 2v5.5a2 2 0 01-2 2H6.5a2 2 0 01-2-2v-5.5a2 2 0 012-2z" />
-                  </svg>
-                  Listen to Question
-                </button>
+          {step === 'language-selection' ? (
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-lg shadow-black/20 border border-gray-700/50 p-12 space-y-12">
+              <div className="text-center space-y-3">
+                <div className="flex justify-center gap-4 mb-8">
+                  <div className="space-y-6">
+                    {/* Multilingual word cloud infographic */}
+                    <div className="relative h-80 flex items-center justify-center mb-6">
+                      {/* Large prominent words */}
+                      <div className="absolute text-yellow-400/60 text-7xl blur-[1px] animate-pulse">सफलता</div>
+                      <div className="absolute transform -rotate-6 text-green-400/60 text-6xl bottom-8 left-24 blur-[0.5px]">অভিজ্ঞতা</div>
+                      <div className="absolute transform rotate-3 text-blue-400/60 text-6xl top-4 right-20 blur-[0.5px]">കഴിവുകൾ</div>
+                      
+                      {/* Medium-sized words */}
+                      <div className="absolute transform -rotate-12 text-purple-400/50 text-4xl left-12 top-8">नौकरी</div>
+                      <div className="absolute transform rotate-12 text-pink-400/50 text-4xl top-12 left-32">ലക്ഷ്യങ്ങൾ</div>
+                      <div className="absolute transform -rotate-20 text-cyan-400/50 text-4xl bottom-16 right-16">ভবিষ্যৎ</div>
+                      <div className="absolute transform rotate-3 text-orange-400/50 text-4xl top-8 left-16">വളർച്ച</div>
+                      <div className="absolute transform rotate-90 text-indigo-400/50 text-4xl bottom-4 right-36">विकास</div>
+                      
+                      {/* Background layer words */}
+                      <div className="absolute transform rotate-15 text-emerald-400/40 text-3xl top-2 left-48">শক্তি</div>
+                      <div className="absolute transform -rotate-25 text-rose-400/40 text-3xl bottom-20 left-8">प्रगति</div>
+                      <div className="absolute transform rotate-8 text-amber-400/40 text-3xl top-16 right-8">വിജയം</div>
+                      <div className="absolute transform -rotate-15 text-teal-400/40 text-3xl bottom-12 right-24">কর্ম</div>
+                      <div className="absolute transform rotate-30 text-fuchsia-400/40 text-3xl top-20 right-48">ज्ञान</div>
+                      <div className="absolute transform -rotate-8 text-lime-400/40 text-3xl bottom-24 left-40">അറിവ്</div>
+                      <div className="absolute transform rotate-20 text-violet-400/40 text-3xl top-4 left-60">পেশা</div>
+                      <div className="absolute text-sky-400/40 text-3xl right-52">योग्यता</div>
+                      
+                      {/* Additional background words */}
+                      <div className="absolute transform rotate-45 text-purple-400/30 text-2xl top-28 left-24">ಕೌಶಲ್ಯ</div>
+                      <div className="absolute transform -rotate-35 text-blue-400/30 text-2xl bottom-28 right-28">উন্নতি</div>
+                      <div className="absolute transform rotate-15 text-green-400/30 text-2xl top-16 right-36">समृद्धि</div>
+                      <div className="absolute transform -rotate-12 text-pink-400/30 text-2xl bottom-16 left-36">വിദ്യ</div>
+                      <div className="absolute transform rotate-25 text-yellow-400/30 text-2xl top-32 right-24">মূল্য</div>
+                      <div className="absolute transform -rotate-20 text-cyan-400/30 text-2xl bottom-32 left-28">आशा</div>
+                      
+                      {/* Central emoji with glow effect */}
+                      <div className="relative z-10">
+                        <span className="text-9xl filter drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]">💼</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
               
-              <div className="flex flex-col items-center gap-6">
-                <button
-                  type="button"
-                  onClick={handleRecordingClick}
-                  disabled={isProcessing}
-                  className={`
-                    w-full sm:w-auto px-8 py-4 rounded-xl font-medium text-lg
-                    transition-all duration-200 ease-in-out
-                    ${isRecording 
-                      ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'
-                      : 'bg-purple-500 hover:bg-purple-600 text-white shadow-purple-500/20'
-                    }
-                    disabled:opacity-50 shadow-lg hover:shadow-xl
-                    border border-white/10 hover:border-white/20
-                  `}
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    {isRecording ? (
-                      <>
-                        <span className="h-2 w-2 rounded-full bg-white animate-pulse"></span>
-                        Stop Recording
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                        </svg>
-                        Start Recording
-                      </>
-                    )}
-                  </div>
-                </button>
-
-                {isProcessing && (
-                  <div className="flex items-center gap-3 text-purple-200">
-                    <svg
-                      className="animate-spin h-5 w-5 text-purple-400"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    <span className="font-medium">Processing your response...</span>
-                  </div>
-                )}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                {languages.map((lang) => (
+                  <button
+                    key={lang.code}
+                    onClick={() => selectLanguage(lang.code)}
+                    className="flex flex-col items-center justify-center p-8 rounded-xl
+                      bg-gray-700/30 hover:bg-purple-500/30 transition-all duration-200
+                      border border-gray-600/50 hover:border-purple-500/50
+                      group"
+                  >
+                    <span className="text-4xl font-bold text-white mb-3">{lang.name}</span>
+                    <span className="text-lg text-purple-200/80 group-hover:text-purple-100">{lang.label}</span>
+                  </button>
+                ))}
+                    
               </div>
             </div>
           ) : (
-            <div className="space-y-6">
-              <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl shadow-lg shadow-black/20 border border-gray-700/50 p-8 text-center">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
-                    <svg className="w-8 h-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <h2 className="text-2xl font-semibold text-white">Thank You for Your Responses!</h2>
-                  <p className="text-purple-200/80">Your information has been successfully recorded.</p>
-                </div>
-              </div>
-
-              <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl shadow-lg shadow-black/20 border border-gray-700/50 p-8">
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-4">
-                    <label className="text-xl font-semibold text-white">Review Your Answers</label>
-                    <textarea
-                      value={Object.entries(answers).map(([key, value]) => 
-                        `${questions.find(q => q.key === key)?.label}\n${value}\n`
-                      ).join('\n')}
-                      className="w-full min-h-[300px] rounded-xl border-gray-700 bg-gray-900/50 p-4 text-gray-100 
-                        focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-gray-500"
-                      readOnly
-                    />
-                  </div>
-                  { <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full sm:w-auto px-8 py-4 bg-purple-500 hover:bg-purple-600 text-white 
-                      rounded-xl font-medium text-lg transition-all duration-200 ease-in-out 
-                      shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/30 
-                      disabled:opacity-50 disabled:hover:bg-purple-500
-                      border border-white/10 hover:border-white/20"
-                  >
-                    {loading ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        <span>Generating...</span>
-                      </div>
-                    ) : (
-                      "Generate Resume?"
+            <>
+              {!allQuestionsAnswered ? (
+                <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl shadow-lg shadow-black/20 border border-gray-700/50 p-8 space-y-8">
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-purple-400 uppercase tracking-wide">
+                      Question {currentQuestionIndex + 1} of {questions.length}
+                    </p>
+                    <h2 className="text-2xl font-semibold text-white">
+                      {questions[currentQuestionIndex].label}
+                    </h2>
+                    {translatedQuestions[currentQuestionIndex] && (
+                      <p className="text-lg text-purple-200 mt-2">
+                        {translatedQuestions[currentQuestionIndex]}
+                      </p>
                     )}
-                  </button> }
-                </form>
-              </div>
-            </div>
+                    <button
+                      onClick={speakQuestion}
+                      className="mt-4 px-4 py-2 bg-purple-500/20 text-purple-200 rounded-lg 
+                        hover:bg-purple-500/30 transition-colors duration-200 flex items-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                          d="M15.536 8.464a5 5 0 010 7.072M17.95 6.05a8 8 0 010 11.9M6.5 8.25h.75a2 2 0 012 2v5.5a2 2 0 01-2 2H6.5a2 2 0 01-2-2v-5.5a2 2 0 012-2z" />
+                      </svg>
+                      Listen to Question
+                    </button>
+                  </div>
+                  
+                  <div className="flex flex-col items-center gap-6">
+                    <button
+                      type="button"
+                      onClick={handleRecordingClick}
+                      disabled={isProcessing}
+                      className={`
+                        w-full sm:w-auto px-8 py-4 rounded-xl font-medium text-lg
+                        transition-all duration-200 ease-in-out
+                        ${isRecording 
+                          ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'
+                          : 'bg-purple-500 hover:bg-purple-600 text-white shadow-purple-500/20'
+                        }
+                        disabled:opacity-50 shadow-lg hover:shadow-xl
+                        border border-white/10 hover:border-white/20
+                      `}
+                    >
+                      <div className="flex items-center justify-center gap-2">
+                        {isRecording ? (
+                          <>
+                            <span className="h-2 w-2 rounded-full bg-white animate-pulse"></span>
+                            Stop Recording
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                            </svg>
+                            Start Recording
+                          </>
+                        )}
+                      </div>
+                    </button>
+
+                    {isProcessing && (
+                      <div className="flex items-center gap-3 text-purple-200">
+                        <svg
+                          className="animate-spin h-5 w-5 text-purple-400"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          />
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          />
+                        </svg>
+                        <span className="font-medium">Processing your response...</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl shadow-lg shadow-black/20 border border-gray-700/50 p-8 text-center">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center">
+                        <svg className="w-8 h-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <h2 className="text-2xl font-semibold text-white">Thank You for Your Responses!</h2>
+                      <p className="text-purple-200/80">Your information has been successfully recorded.</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl shadow-lg shadow-black/20 border border-gray-700/50 p-8">
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                      <div className="space-y-4">
+                        <label className="text-xl font-semibold text-white">Review Your Answers</label>
+                        <textarea
+                          value={Object.entries(answers).map(([key, value]) => 
+                            `${questions.find(q => q.key === key)?.label}\n${value}\n`
+                          ).join('\n')}
+                          className="w-full min-h-[300px] rounded-xl border-gray-700 bg-gray-900/50 p-4 text-gray-100 
+                            focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-gray-500"
+                          readOnly
+                        />
+                      </div>
+                      { <button
+                        type="submit"
+                        disabled={isProcessing}
+                        className="w-full sm:w-auto px-8 py-4 bg-purple-500 hover:bg-purple-600 text-white 
+                          rounded-xl font-medium text-lg transition-all duration-200 ease-in-out 
+                          shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/30 
+                          disabled:opacity-50 disabled:hover:bg-purple-500
+                          border border-white/10 hover:border-white/20"
+                      >
+                        {isProcessing ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <span>Generating...</span>
+                          </div>
+                        ) : (
+                          "Generate Resume?"
+                        )}
+                      </button> }
+                    </form>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {error && (
@@ -482,6 +658,8 @@ export default function Home() {
               {error}
             </div>
           )}
+
+    
         </main>
       </div>
     </div>
