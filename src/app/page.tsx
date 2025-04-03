@@ -349,52 +349,43 @@ export default function Home() {
       <div className="max-w-3xl mx-auto p-8">
         <main className="flex flex-col gap-10">
           {step === 'language-selection' ? (
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-lg shadow-black/20 border border-gray-700/50 p-12 space-y-12">
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-lg shadow-black/20 border border-gray-700/50 p-6 sm:p-12 space-y-12">
               <div className="text-center space-y-3">
                 <div className="flex justify-center gap-4 mb-8">
-                  <div className="space-y-6">
-                    {/* Multilingual word cloud infographic */}
-                    <div className="relative h-80 flex items-center justify-center mb-6">
-                      {/* Large prominent words */}
-                      <div className="absolute text-yellow-400/60 text-7xl blur-[1px] animate-pulse">सफलता</div>
-                      <div className="absolute transform -rotate-6 text-green-400/60 text-6xl bottom-8 left-24 blur-[0.5px]">অভিজ্ঞতা</div>
-                      <div className="absolute transform rotate-3 text-blue-400/60 text-6xl top-4 right-20 blur-[0.5px]">കഴിവുകൾ</div>
+                  <div className="space-y-6 w-full">
+                    {/* Responsive word cloud infographic */}
+                    <div className="relative h-48 sm:h-80 flex items-center justify-center mb-6">
+                      {/* Large prominent words - adjusted for mobile */}
+                      <div className="absolute text-yellow-400/60 text-4xl sm:text-7xl blur-[1px] animate-pulse">सफलता</div>
+                      <div className="absolute transform -rotate-6 text-green-400/60 text-3xl sm:text-6xl bottom-4 sm:bottom-8 left-12 sm:left-24 blur-[0.5px]">অভিজ্ঞতা</div>
+                      <div className="absolute transform rotate-3 text-blue-400/60 text-3xl sm:text-6xl top-2 sm:top-4 right-10 sm:right-20 blur-[0.5px]">കഴിവുകൾ</div>
                       
-                      {/* Medium-sized words */}
-                      <div className="absolute transform -rotate-12 text-purple-400/50 text-4xl left-12 top-8">नौकरी</div>
-                      <div className="absolute transform rotate-12 text-pink-400/50 text-4xl top-12 left-32">ലക്ഷ്യങ്ങൾ</div>
-                      <div className="absolute transform -rotate-20 text-cyan-400/50 text-4xl bottom-16 right-16">ভবিষ্যৎ</div>
-                      <div className="absolute transform rotate-3 text-orange-400/50 text-4xl top-8 left-16">വളർച്ച</div>
-                      <div className="absolute transform rotate-90 text-indigo-400/50 text-4xl bottom-4 right-36">विकास</div>
+                      {/* Medium-sized words - hidden on mobile, visible on larger screens */}
+                      <div className="hidden sm:block absolute transform -rotate-12 text-purple-400/50 text-4xl left-12 top-8">नौकरी</div>
+                      <div className="hidden sm:block absolute transform rotate-12 text-pink-400/50 text-4xl top-12 left-32">ലക്ഷ്യങ്ങൾ</div>
+                      <div className="hidden sm:block absolute transform -rotate-20 text-cyan-400/50 text-4xl bottom-16 right-16">ভবিষ্যৎ</div>
+                      <div className="hidden sm:block absolute transform rotate-3 text-orange-400/50 text-4xl top-8 left-16">വളർച്ച</div>
+                      <div className="hidden sm:block absolute transform rotate-90 text-indigo-400/50 text-4xl bottom-4 right-36">विकास</div>
                       
-                      {/* Background layer words */}
-                      <div className="absolute transform rotate-15 text-emerald-400/40 text-3xl top-2 left-48">শক্তি</div>
-                      <div className="absolute transform -rotate-25 text-rose-400/40 text-3xl bottom-20 left-8">प्रगति</div>
-                      <div className="absolute transform rotate-8 text-amber-400/40 text-3xl top-16 right-8">വിജയം</div>
-                      <div className="absolute transform -rotate-15 text-teal-400/40 text-3xl bottom-12 right-24">কর্ম</div>
-                      <div className="absolute transform rotate-30 text-fuchsia-400/40 text-3xl top-20 right-48">ज्ञान</div>
-                      <div className="absolute transform -rotate-8 text-lime-400/40 text-3xl bottom-24 left-40">അറിവ്</div>
-                      <div className="absolute transform rotate-20 text-violet-400/40 text-3xl top-4 left-60">পেশা</div>
-                      <div className="absolute text-sky-400/40 text-3xl right-52">योग्यता</div>
+                      {/* Background layer words - fewer shown on mobile */}
+                      <div className="hidden sm:block absolute transform rotate-15 text-emerald-400/40 text-3xl top-2 left-48">শক্তি</div>
+                      <div className="hidden sm:block absolute transform -rotate-25 text-rose-400/40 text-3xl bottom-20 left-8">प्रगति</div>
+                      <div className="hidden sm:block absolute transform rotate-8 text-amber-400/40 text-3xl top-16 right-8">വിജയം</div>
                       
-                      {/* Additional background words */}
-                      <div className="absolute transform rotate-45 text-purple-400/30 text-2xl top-28 left-24">ಕೌಶಲ್ಯ</div>
-                      <div className="absolute transform -rotate-35 text-blue-400/30 text-2xl bottom-28 right-28">উন্নতি</div>
-                      <div className="absolute transform rotate-15 text-green-400/30 text-2xl top-16 right-36">समृद्धि</div>
-                      <div className="absolute transform -rotate-12 text-pink-400/30 text-2xl bottom-16 left-36">വിദ്യ</div>
-                      <div className="absolute transform rotate-25 text-yellow-400/30 text-2xl top-32 right-24">মূল্য</div>
-                      <div className="absolute transform -rotate-20 text-cyan-400/30 text-2xl bottom-32 left-28">आशा</div>
+                      {/* Additional background words - hidden on mobile */}
+                      <div className="hidden sm:block absolute transform rotate-45 text-purple-400/30 text-2xl top-28 left-24">ಕೌಶಲ್ಯ</div>
+                      <div className="hidden sm:block absolute transform -rotate-35 text-blue-400/30 text-2xl bottom-28 right-28">উন্নতি</div>
                       
-                      {/* Central emoji with glow effect */}
+                      {/* Central emoji with glow effect - responsive size */}
                       <div className="relative z-10">
-                        <span className="text-9xl filter drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]">💼</span>
+                        <span className="text-6xl sm:text-9xl filter drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]">💼</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
                 {languages.map((lang) => (
                   <button
                     key={lang.code}
