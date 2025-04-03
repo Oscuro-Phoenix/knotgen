@@ -276,7 +276,7 @@ export default function Home() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    let isLoading = true;
+    setIsProcessing(true);
     setError(null);
 
     try {
@@ -302,7 +302,7 @@ export default function Home() {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate resume';
       setError(errorMessage);
     } finally {
-      isLoading = false;
+      setIsProcessing(false);
     }
   };
 
@@ -342,103 +342,6 @@ export default function Home() {
       const errorMessage = error instanceof Error ? error.message : 'Failed to play audio';
       setError(errorMessage);
     }
-  };
-
-  const detectLanguage = async () => {
-    if (!mediaRecorder) {
-      setError('Recording is not supported in your browser');
-      return;
-    }
-
-    setIsProcessing(true);
-    setAudioChunks([]);
-    
-    return new Promise<void>((resolve) => {
-      let currentRecordingChunks: Blob[] = [];
-
-      const handleDataAvailable = (event: BlobEvent) => {
-        if (event.data.size > 0) {
-          currentRecordingChunks.push(event.data);
-        }
-      };
-
-      mediaRecorder.addEventListener('dataavailable', handleDataAvailable);
-      
-      mediaRecorder.addEventListener('stop', async () => {
-        try {
-          // Remove the event listener
-          mediaRecorder.removeEventListener('dataavailable', handleDataAvailable);
-          
-          if (currentRecordingChunks.length === 0) {
-            throw new Error('No audio data recorded');
-          }
-
-          const audioBlob = new Blob(currentRecordingChunks, { type: 'audio/webm' });
-          console.log('Language detection audio blob size:', audioBlob.size);
-          
-          const reader = new FileReader();
-          const base64Audio = await new Promise<string>((resolve, reject) => {
-            reader.onload = () => {
-              const base64 = reader.result as string;
-              const base64Data = base64.split(',')[1];
-              resolve(base64Data);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(audioBlob);
-          });
-
-          const response = await fetch('/api/detect-language', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              audio: base64Audio,
-              encoding: 'WEBM_OPUS',
-              sampleRateHertz: 48000,
-            }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Language detection failed');
-          }
-
-          const { languageCode } = await response.json();
-          setDetectedLanguage(languageCode);
-          setStep('questionnaire');
-        } catch (error) {
-          console.error('Language detection error:', error);
-          setError(error instanceof Error ? error.message : 'Failed to detect language');
-        } finally {
-          currentRecordingChunks = [];
-          setAudioChunks([]);
-          setIsProcessing(false);
-          resolve();
-        }
-      }, { once: true });
-
-      // Start recording with smaller timeslice
-      mediaRecorder.start(100);
-
-      // Record for 5 seconds then stop
-      setTimeout(() => {
-        if (mediaRecorder.state === 'recording') {
-          mediaRecorder.stop();
-        }
-      }, 5000);
-    });
-  };
-
-  // Add this function to get a friendly language name
-  const getLanguageName = (code: string): string => {
-    const languageMap: Record<string, string> = {
-      'hi-IN': 'Hindi',
-      'en-US': 'English',
-      'bn-IN': 'Bengali',
-      'ml-IN': 'Malayalam'
-    };
-    return languageMap[code] || code;
   };
 
   return (
