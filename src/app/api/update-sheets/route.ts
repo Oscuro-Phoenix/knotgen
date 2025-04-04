@@ -13,30 +13,38 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
 
+// Define field names for each form type
+const jobSeekerFields = ['timestamp', 'name', 'education', 'age', 'location', 'pastJobs'];
+const employerFields = ['timestamp', 'companyName', 'jobTitle', 'requirements', 'experience', 'location'];
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { field, originalText, translatedText, formattedText, timestamp } = body;
+    const { formType, ...formData } = body;
 
     if (!SPREADSHEET_ID) {
       throw new Error('Spreadsheet ID not configured');
     }
 
+    // Select the appropriate sheet and fields based on form type
+    const sheetConfig = formType === 'jobseeker' 
+      ? { range: 'JobSeekers!A:F', fields: jobSeekerFields }
+      : { range: 'Employers!A:F', fields: employerFields };
+
     // Prepare the row data
     const values = [
-      [
-        timestamp,
-        field,
-        originalText,
-        translatedText,
-        formattedText,
-      ]
+      sheetConfig.fields.map(field => {
+        if (field === 'timestamp') {
+          return new Date().toISOString();
+        }
+        return formData[field] || '';
+      })
     ];
 
-    // Append the data to the sheet
+    // Append the data to the appropriate sheet
     const response = await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: 'Sheet1!A:E', // Adjust the sheet name and range as needed
+      range: sheetConfig.range,
       valueInputOption: 'RAW',
       requestBody: {
         values,

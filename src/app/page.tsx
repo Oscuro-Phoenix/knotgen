@@ -4,13 +4,27 @@ import { useState, FormEvent, useEffect } from "react";
 
 
 export default function Home() {
-  const questions = [
+  const jobSeekerQuestions = [
     { key: 'name', label: 'What is your full name?' },
     { key: 'education', label: 'What is your educational background?' },
     { key: 'age', label: 'What is your age?' },
     { key: 'location', label: 'Where are you located?' },
     { key: 'pastJobs', label: 'Tell me about your past jobs.' },
   ];
+
+  const employerQuestions = [
+    { key: 'companyName', label: 'What is your company name?' },
+    { key: 'jobTitle', label: 'What position are you hiring for?' },
+    { key: 'requirements', label: 'What are the key requirements for this role?' },
+    { key: 'experience', label: 'How many years of experience are required?' },
+    { key: 'location', label: 'Where is the job location?' },
+  ];
+
+  const [userRole, setUserRole] = useState<'employer' | 'jobseeker' | null>(null);
+  const [step, setStep] = useState<'role-selection' | 'language-selection' | 'questionnaire'>('role-selection');
+  
+  // Update the questions state to use the appropriate question set
+  const questions = userRole === 'employer' ? employerQuestions : jobSeekerQuestions;
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({
@@ -27,15 +41,29 @@ export default function Home() {
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [translatedQuestions, setTranslatedQuestions] = useState<string[]>([]);
-  const [step, setStep] = useState<'language-selection' | 'questionnaire'>('language-selection');
   const [detectedLanguage, setDetectedLanguage] = useState<string>('');
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [employeeSuggestions, setEmployeeSuggestions] = useState<Array<{
+    name: string;
+    education: string;
+    experience: string;
+    matchScore: number;
+  }>>([]);
 
   const languages: Array<{ code: string; name: string; label: string }> = [
     { code: 'bn-IN', name: 'বাংলা', label: 'Bengali' },
     { code: 'hi-IN', name: 'हिंदी', label: 'Hindi' },
     { code: 'ml-IN', name: 'മലയാളം', label: 'Malayalam' },
   ];
+
+  const selectRole = (role: 'employer' | 'jobseeker') => {
+    setUserRole(role);
+    setStep('language-selection');
+    // Reset any existing answers
+    setAnswers({});
+    setCurrentQuestionIndex(0);
+    setAllQuestionsAnswered(false);
+  };
 
   const selectLanguage = (languageCode: string) => {
     setDetectedLanguage(languageCode);
@@ -230,28 +258,27 @@ export default function Home() {
           const formattedText = formatText(translatedText, currentField);
           handleInputChange(currentField, formattedText);
 
-          // Add Google Sheets posting
-          try {
-            const sheetsResponse = await fetch('/api/update-sheets', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                field: currentField,
-                originalText: transcript,
-                translatedText: translatedText,
-                formattedText: formattedText,
-                timestamp: new Date().toISOString(),
-              }),
-            });
+          // Only send to Google Sheets if this is the last question
+          if (currentQuestionIndex === questions.length - 1) {
+            try {
+              const sheetsResponse = await fetch('/api/update-sheets', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  formType: userRole,
+                  ...answers,
+                }),
+              });
 
-            if (!sheetsResponse.ok) {
-              console.error('Failed to update Google Sheets:', await sheetsResponse.text());
+              if (!sheetsResponse.ok) {
+                console.error('Failed to update Google Sheets:', await sheetsResponse.text());
+              }
+            } catch (sheetsError) {
+              console.error('Error updating Google Sheets:', sheetsError);
+              // Don't throw the error to prevent interrupting the main flow
             }
-          } catch (sheetsError) {
-            console.error('Error updating Google Sheets:', sheetsError);
-            // Don't throw the error to prevent interrupting the main flow
           }
 
           // After successful recording, move to next question
@@ -285,32 +312,60 @@ export default function Home() {
     }
   };
 
+  const fetchTopCandidates = async (requirements: string) => {
+    try {
+      const response = await fetch('/api/match-candidates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requirements,
+          jobTitle: answers.jobTitle,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch candidates');
+      }
+
+      const data = await response.json();
+      setEmployeeSuggestions(data.candidates);
+    } catch (error) {
+      console.error('Error fetching candidates:', error);
+      setError('Failed to fetch candidate suggestions');
+    }
+  };
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsProcessing(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/generate-resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ answers }),
-      });
+      if (userRole === 'employer') {
+        await fetchTopCandidates(answers.requirements);
+      } else {
+        // Existing resume generation code
+        const response = await fetch("/api/generate-resume", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ answers }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to generate resume");
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to generate resume");
+        }
+
+        const pdfBlob = await response.blob();
+        const url = window.URL.createObjectURL(pdfBlob);
+        window.open(url, '_blank');
       }
-
-      const pdfBlob = await response.blob();
-      const url = window.URL.createObjectURL(pdfBlob);
-      
-      // Open PDF in new tab
-      window.open(url, '_blank');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to generate resume';
+      const errorMessage = error instanceof Error ? error.message : 'Operation failed';
       setError(errorMessage);
     } finally {
       setIsProcessing(false);
@@ -355,6 +410,46 @@ export default function Home() {
     }
   };
 
+  const handleNextClick = async () => {
+    const currentField = questions[currentQuestionIndex].key;
+    const currentAnswer = answers[currentField];
+    
+    if (!currentAnswer) return;
+
+    setIsProcessing(true);
+    try {
+      // Only send to Google Sheets if this is the last question
+      if (currentQuestionIndex === questions.length - 1) {
+        const sheetsResponse = await fetch('/api/update-sheets', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            formType: userRole,
+            ...answers,
+          }),
+        });
+
+        if (!sheetsResponse.ok) {
+          console.error('Failed to update Google Sheets:', await sheetsResponse.text());
+        }
+      }
+
+      // Move to next question
+      if (currentQuestionIndex < questions.length - 1) {
+        setCurrentQuestionIndex(prev => prev + 1);
+      } else {
+        setAllQuestionsAnswered(true);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setError('Failed to process answer');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (isInitialLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-900 via-[#0f172a] to-gray-900 flex items-center justify-center">
@@ -370,11 +465,42 @@ export default function Home() {
 
   return (
     <>
- 
       <div className="min-h-screen bg-gradient-to-b from-gray-900 via-[#0f172a] to-gray-900">
         <div className="max-w-3xl mx-auto p-8">
           <main className="flex flex-col gap-10">
-            {step === 'language-selection' ? (
+            {step === 'role-selection' ? (
+              <div className="min-h-[80vh] flex items-center justify-center">
+                <div className="bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-lg shadow-black/20 border border-gray-700/50 p-6 sm:p-12 space-y-12 w-full">
+                  <div className="text-center space-y-3">
+                    <h2 className="text-4xl font-bold text-purple-200">Please select your role</h2>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
+                    <button
+                      onClick={() => selectRole('jobseeker')}
+                      className="flex flex-col items-center justify-center p-8 rounded-xl
+                        bg-gray-700/30 hover:bg-purple-500/30 transition-all duration-200
+                        border border-gray-600/50 hover:border-purple-500/50 group"
+                    >
+                      <span className="text-4xl mb-3">👤</span>
+                      <span className="text-2xl font-bold text-white">Job Seeker</span>
+                      <span className="text-purple-200/80 mt-2">Looking for opportunities</span>
+                    </button>
+
+                    <button
+                      onClick={() => selectRole('employer')}
+                      className="flex flex-col items-center justify-center p-8 rounded-xl
+                        bg-gray-700/30 hover:bg-purple-500/30 transition-all duration-200
+                        border border-gray-600/50 hover:border-purple-500/50 group"
+                    >
+                      <span className="text-4xl mb-3">💼</span>
+                      <span className="text-2xl font-bold text-white">Employer</span>
+                      <span className="text-purple-200/80 mt-2">Hiring talent</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : step === 'language-selection' ? (
               <div className="bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-lg shadow-black/20 border border-gray-700/50 p-6 sm:p-12 space-y-12">
                 <div className="text-center space-y-3">
                   <div className="flex justify-center gap-4 mb-8">
@@ -459,37 +585,60 @@ export default function Home() {
                     </div>
                     
                     <div className="flex flex-col items-center gap-6">
-                      <button
-                        type="button"
-                        onClick={handleRecordingClick}
-                        disabled={isProcessing}
-                        className={`
-                          w-full sm:w-auto px-8 py-4 rounded-xl font-medium text-lg
-                          transition-all duration-200 ease-in-out
-                          ${isRecording 
-                            ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'
-                            : 'bg-purple-500 hover:bg-purple-600 text-white shadow-purple-500/20'
-                          }
-                          disabled:opacity-50 shadow-lg hover:shadow-xl
-                          border border-white/10 hover:border-white/20
-                        `}
-                      >
-                        <div className="flex items-center justify-center gap-2">
-                          {isRecording ? (
-                            <>
-                              <span className="h-2 w-2 rounded-full bg-white animate-pulse"></span>
-                              Stop Recording
-                            </>
-                          ) : (
-                            <>
-                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                              </svg>
-                              Start Recording
-                            </>
-                          )}
-                        </div>
-                      </button>
+                      <input
+                        type="text"
+                        value={answers[questions[currentQuestionIndex].key] || ''}
+                        onChange={(e) => handleInputChange(questions[currentQuestionIndex].key, e.target.value)}
+                        className="w-full rounded-xl border-gray-700 bg-gray-900/50 p-4 text-gray-100 
+                          focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-gray-500"
+                        placeholder="Type your answer..."
+                      />
+
+                      <div className="flex gap-4 w-full">
+                        <button
+                          type="button"
+                          onClick={handleNextClick}
+                          disabled={isProcessing || !answers[questions[currentQuestionIndex].key]}
+                          className="w-full sm:w-auto px-8 py-4 bg-purple-500 hover:bg-purple-600 text-white 
+                            rounded-xl font-medium text-lg transition-all duration-200 ease-in-out 
+                            shadow-lg shadow-purple-500/20 hover:shadow-xl disabled:opacity-50
+                            border border-white/10 hover:border-white/20"
+                        >
+                          Next
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleRecordingClick}
+                          disabled={isProcessing}
+                          className={`
+                            w-full sm:w-auto px-8 py-4 rounded-xl font-medium text-lg
+                            transition-all duration-200 ease-in-out
+                            ${isRecording 
+                              ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'
+                              : 'bg-purple-500 hover:bg-purple-600 text-white shadow-purple-500/20'
+                            }
+                            disabled:opacity-50 shadow-lg hover:shadow-xl
+                            border border-white/10 hover:border-white/20
+                          `}
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            {isRecording ? (
+                              <>
+                                <span className="h-2 w-2 rounded-full bg-white animate-pulse"></span>
+                                Stop Recording
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                </svg>
+                                Start Recording
+                              </>
+                            )}
+                          </div>
+                        </button>
+                      </div>
 
                       {isProcessing && (
                         <div className="flex items-center gap-3 text-purple-200">
@@ -535,38 +684,80 @@ export default function Home() {
                     <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl shadow-lg shadow-black/20 border border-gray-700/50 p-8">
                       <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-4">
-                          <label className="text-xl font-semibold text-white">Review Your Answers</label>
+                          <label className="text-xl font-semibold text-white">Review Your Input</label>
                           <textarea
                             value={Object.entries(answers).map(([key, value]) => 
                               `${questions.find(q => q.key === key)?.label}\n${value}\n`
                             ).join('\n')}
-                            className="w-full min-h-[300px] rounded-xl border-gray-700 bg-gray-900/50 p-4 text-gray-100 
+                            className="w-full min-h-[200px] rounded-xl border-gray-700 bg-gray-900/50 p-4 text-gray-100 
                               focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-gray-500"
                             readOnly
                           />
                         </div>
-                        { <button
-                          type="submit"
-                          disabled={isProcessing}
-                          className="w-full sm:w-auto px-8 py-4 bg-purple-500 hover:bg-purple-600 text-white 
-                            rounded-xl font-medium text-lg transition-all duration-200 ease-in-out 
-                            shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/30 
-                            disabled:opacity-50 disabled:hover:bg-purple-500
-                            border border-white/10 hover:border-white/20"
-                        >
-                          {isProcessing ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                              </svg>
-                              <span>Generating...</span>
-                            </div>
-                          ) : (
-                            "Generate Resume?"
-                          )}
-                        </button> }
+                        <div className="flex flex-col sm:flex-row gap-4">
+                          <button
+                            type="submit"
+                            disabled={isProcessing}
+                            className="w-full sm:w-auto px-8 py-4 bg-purple-500 hover:bg-purple-600 text-white 
+                              rounded-xl font-medium text-lg transition-all duration-200 ease-in-out 
+                              shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/30 
+                              disabled:opacity-50 disabled:hover:bg-purple-500
+                              border border-white/10 hover:border-white/20"
+                          >
+                            {isProcessing ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                <span>{userRole === 'employer' ? 'Finding Matches...' : 'Generating...'}</span>
+                              </div>
+                            ) : (
+                              userRole === 'employer' ? "Find Matching Candidates" : "Generate Resume"
+                            )}
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUserRole(null);
+                              setStep('role-selection');
+                              setAnswers({});
+                              setCurrentQuestionIndex(0);
+                              setAllQuestionsAnswered(false);
+                              setEmployeeSuggestions([]);
+                            }}
+                            className="w-full sm:w-auto px-8 py-4 bg-gray-600 hover:bg-gray-700 text-white 
+                              rounded-xl font-medium text-lg transition-all duration-200 ease-in-out 
+                              shadow-lg shadow-gray-500/20 hover:shadow-xl hover:shadow-gray-500/30 
+                              border border-white/10 hover:border-white/20"
+                          >
+                            Start Over
+                          </button>
+                        </div>
                       </form>
+
+                      {userRole === 'employer' && employeeSuggestions.length > 0 && (
+                        <div className="mt-8 space-y-6">
+                          <h3 className="text-xl font-semibold text-white">Top Matching Candidates</h3>
+                          <div className="grid gap-4 sm:grid-cols-3">
+                            {employeeSuggestions.map((candidate, index) => (
+                              <div key={index} className="bg-gray-700/30 rounded-xl p-6 border border-gray-600/50">
+                                <div className="flex items-center justify-between mb-4">
+                                  <span className="text-lg font-medium text-white">{candidate.name}</span>
+                                  <span className="text-sm font-medium text-purple-400">
+                                    {Math.round(candidate.matchScore)}% Match
+                                  </span>
+                                </div>
+                                <div className="space-y-2 text-sm text-purple-200">
+                                  <p><span className="text-purple-400">Education:</span> {candidate.education}</p>
+                                  <p><span className="text-purple-400">Experience:</span> {candidate.experience}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -581,6 +772,11 @@ export default function Home() {
 
       
           </main>
+          
+          {/* Add footnote */}
+          <footer className="text-center py-6 text-purple-300/60 text-sm italic">
+            Mauka - Empowering today's youth to elevate tomorrow's workforce
+          </footer>
         </div>
       </div>
     </>
