@@ -508,7 +508,7 @@ export default function Home() {
                       {/* Responsive word cloud infographic */}
                       <div className="relative h-48 sm:h-80 flex items-center justify-center mb-6">
                         {/* Large prominent words - adjusted for mobile */}
-                        <div className="absolute text-yellow-400/60 text-4xl sm:text-7xl blur-[1px] animate-pulse">সफলতা</div>
+                        <div className="absolute text-yellow-400/60 text-4xl sm:text-7xl blur-[1px] animate-pulse">সফলতা</div>
                         <div className="absolute transform -rotate-6 text-green-400/60 text-3xl sm:text-6xl bottom-4 sm:bottom-8 left-12 sm:left-24 blur-[0.5px]">অভিজ্ঞতা</div>
                         <div className="absolute transform rotate-3 text-blue-400/60 text-3xl sm:text-6xl top-2 sm:top-4 right-10 sm:right-20 blur-[0.5px]">കഴിവുകൾ</div>
                         
@@ -775,7 +775,7 @@ export default function Home() {
           
           {/* Add footnote */}
           <footer className="text-center py-6 text-purple-300/60 text-sm italic">
-            Mauka - Empowering today's youth to elevate tomorrow's workforce
+            Mauka - Empowering today&apos;s youth to elevate tomorrow&apos;s workforce
           </footer>
         </div>
       </div>
