@@ -29,6 +29,7 @@ export default function Home() {
   const [translatedQuestions, setTranslatedQuestions] = useState<string[]>([]);
   const [step, setStep] = useState<'language-selection' | 'questionnaire'>('language-selection');
   const [detectedLanguage, setDetectedLanguage] = useState<string>('');
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const languages: Array<{ code: string; name: string; label: string }> = [
     { code: 'bn-IN', name: 'বাংলা', label: 'Bengali' },
@@ -40,6 +41,15 @@ export default function Home() {
     setDetectedLanguage(languageCode);
     setStep('questionnaire');
   };
+
+  useEffect(() => {
+    // Simulate initial loading
+    const timer = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 2000); // 2 seconds delay
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -344,6 +354,19 @@ export default function Home() {
       setError(errorMessage);
     }
   };
+
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-900 via-[#0f172a] to-gray-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="h-full w-full mx-auto">
+            <img src="/knotai.png" alt="KnotAI Logo" className="w-full h-full animate-pulse" />
+          </div>
+          <p className="text-purple-200 text-lg">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

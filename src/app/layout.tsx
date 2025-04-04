@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from 'react';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,11 +14,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'knotai',
+  title: 'Mauka',
   description: 'Empowering Today\'s Youth to Elevate Tomorrow\'s Workforce',
   icons: {
     icon: [
-      { url: '/knotai.svg', type: 'image/png', sizes: '32x32' },
+      {
+        url: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💼</text></svg>',
+        type: 'image/svg+xml',
+      },
     ],
   },
 };
@@ -28,11 +32,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body>
+        <Suspense fallback={null}>
+          {children}
+        </Suspense>
       </body>
     </html>
   );
