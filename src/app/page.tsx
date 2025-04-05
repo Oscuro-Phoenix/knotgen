@@ -49,6 +49,7 @@ export default function Home() {
     experience: string;
     matchScore: number;
   }>>([]);
+  const [isFoundersModalOpen, setIsFoundersModalOpen] = useState(false);
 
   const languages: Array<{ code: string; name: string; label: string }> = [
     { code: 'bn-IN', name: 'বাংলা', label: 'Bengali' },
@@ -450,6 +451,78 @@ export default function Home() {
     }
   };
 
+  const founders = [
+    {
+      name: "Shakul Pathak",
+      role: "Co-Founder",
+      image: "/founders/shakulp.jpg",
+      linkedin: "https://linkedin.com/in/shakul-pathak",
+    },
+    {
+      name: "Anup Sreekumar",
+      role: "Co-Founder",
+      image: "/founders/anupsk.jpg",
+      linkedin: "https://linkedin.com/in/anup-sreekumar",
+    },
+    // Add more founders as needed
+  ];
+
+  const FoundersModal = () => {
+    if (!isFoundersModalOpen) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-gray-800 rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-6 space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-white text-center flex-grow">Who Are We?</h2>
+              <button
+                onClick={() => setIsFoundersModalOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+              {founders.map((founder) => (
+                <div key={founder.name} className="flex flex-col items-center text-center space-y-4">
+                  <div className="relative w-32 h-32 rounded-full overflow-hidden border-2 border-purple-500/30">
+                    <img
+                      src={founder.image}
+                      alt={founder.name}
+                      className="object-cover w-full h-full"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "https://www.gravatar.com/avatar/?d=mp";
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-xl font-medium text-white">{founder.name}</h4>
+                    <p className="text-purple-300">{founder.role}</p>
+                    <a
+                      href={founder.linkedin}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-purple-400 hover:text-purple-300 transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                      </svg>
+                      <span>Connect on LinkedIn</span>
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (isInitialLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-900 via-[#0f172a] to-gray-900 flex items-center justify-center">
@@ -467,12 +540,49 @@ export default function Home() {
     <>
       <div className="min-h-screen bg-gradient-to-b from-gray-900 via-[#0f172a] to-gray-900">
         <div className="max-w-3xl mx-auto p-8">
+          <div className="mb-6">
+            <div className="mt-6 bg-gray-800/50 backdrop-blur-sm rounded-xl shadow-lg shadow-black/20 
+              border border-gray-700/50 p-6 text-center">
+              <h2 className="text-2xl font-bold text-purple-300 mb-3">Our Mission</h2>
+              <p className="text-purple-100 text-lg leading-relaxed">
+                We help employers get their next hire in days instead of weeks as job seekers from diverse linguistic backgrounds 
+                register in minutes. 
+              </p>
+              
+              <button
+                onClick={() => setIsFoundersModalOpen(true)}
+                className="w-full mt-6 bg-gray-700/30 backdrop-blur-sm rounded-xl shadow-lg shadow-black/20 
+                  border border-gray-600/50 p-4 text-white hover:bg-gray-600/30 transition-all duration-200
+                  flex items-center justify-center gap-2 group"
+              >
+                <svg 
+                  className="w-5 h-5 transform transition-transform duration-200 group-hover:-translate-x-1" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                <span className="text-lg font-medium transform transition-all duration-200 group-hover:scale-105">
+Meet Us               </span>
+                <svg 
+                  className="w-5 h-5 transform transition-transform duration-200 group-hover:translate-x-1" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
           <main className="flex flex-col gap-10">
             {step === 'role-selection' ? (
-              <div className="min-h-[80vh] flex items-center justify-center">
+              <div className="min-h-[40vh] flex items-center justify-center pt-4">
                 <div className="bg-gray-800/50 backdrop-blur-sm rounded-3xl shadow-lg shadow-black/20 border border-gray-700/50 p-6 sm:p-12 space-y-12 w-full">
                   <div className="text-center space-y-3">
-                    <h2 className="text-4xl font-bold text-purple-200">Please select your role</h2>
+                    <h2 className="text-4xl font-bold text-purple-200">What are you looking for?</h2>
                   </div>
                   
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
@@ -773,12 +883,16 @@ export default function Home() {
       
           </main>
           
-          {/* Add footnote */}
-          <footer className="text-center py-6 text-purple-300/60 text-sm italic">
-            Mauka - Empowering today&apos;s youth to elevate tomorrow&apos;s workforce
+          <footer className="py-12">
+            <div className="max-w-3xl mx-auto">
+              <div className="text-center text-purple-300/60 text-sm italic">
+                Mauka - Empowering today&apos;s youth to elevate tomorrow&apos;s workforce
+              </div>
+            </div>
           </footer>
         </div>
       </div>
+      <FoundersModal />
     </>
   );
 }
