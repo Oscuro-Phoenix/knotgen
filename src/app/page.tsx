@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { ReactElement } from 'react';
 
 
 export default function Home() {
@@ -466,7 +467,7 @@ export default function Home() {
     // Add more founders as needed
   ];
 
-  const FoundersModal = (): JSX.Element | null => {
+  const FoundersModal = (): ReactElement | null => {
     if (!isFoundersModalOpen) return null;
 
     return (
@@ -522,7 +523,7 @@ export default function Home() {
     );
   };
 
-  const WelcomeModal = (): JSX.Element | null => {
+  const WelcomeModal = (): ReactElement | null => {
     if (!showWelcomeModal) return null;
 
     return (
