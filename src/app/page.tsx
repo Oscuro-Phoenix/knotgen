@@ -50,6 +50,9 @@ export default function Home() {
     matchScore: number;
   }>>([]);
   const [isFoundersModalOpen, setIsFoundersModalOpen] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(true);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [tempAnswer, setTempAnswer] = useState('');
 
   const languages: Array<{ code: string; name: string; label: string }> = [
     { code: 'bn-IN', name: 'বাংলা', label: 'Bengali' },
@@ -85,7 +88,7 @@ export default function Home() {
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => {
           const recorder = new MediaRecorder(stream);
-          recorder.addEventListener('dataavailable', (event) => {
+          recorder.addEventListener('dataavailable', (event: BlobEvent) => {
             if (event.data.size > 0) {
               setAudioChunks(prev => [...prev, event.data]);
             }
@@ -159,6 +162,12 @@ export default function Home() {
 
   const translateText = async (text: string): Promise<string> => {
     try {
+      // Don't translate name and location fields
+      const currentField = questions[currentQuestionIndex].key;
+      if (currentField === 'name' || currentField === 'location') {
+        return text;
+      }
+
       const response = await fetch('/api/translate', {
         method: 'POST',
         headers: {
@@ -219,14 +228,14 @@ export default function Home() {
           }
 
           const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-          console.log('Audio blob size:', audioBlob.size); // Debug log
+          console.log('Audio blob size:', audioBlob.size);
           
           const reader = new FileReader();
           const base64Audio = await new Promise<string>((resolve, reject) => {
             reader.onload = () => {
               const base64 = reader.result as string;
               const base64Data = base64.split(',')[1];
-              console.log('Base64 length:', base64Data.length); // Debug log
+              console.log('Base64 length:', base64Data.length);
               resolve(base64Data);
             };
             reader.onerror = reject;
@@ -255,9 +264,12 @@ export default function Home() {
           }
 
           const { transcript } = await response.json();
+          // Set the original transcript in the temp answer
+          setTempAnswer(transcript);
+          
+          // Translate and format for internal storage
           const translatedText = await translateText(transcript);
           const formattedText = formatText(translatedText, currentField);
-          handleInputChange(currentField, formattedText);
 
           // Only send to Google Sheets if this is the last question
           if (currentQuestionIndex === questions.length - 1) {
@@ -270,6 +282,7 @@ export default function Home() {
                 body: JSON.stringify({
                   formType: userRole,
                   ...answers,
+                  [currentField]: formattedText, // Use the translated and formatted text for storage
                 }),
               });
 
@@ -278,24 +291,19 @@ export default function Home() {
               }
             } catch (sheetsError) {
               console.error('Error updating Google Sheets:', sheetsError);
-              // Don't throw the error to prevent interrupting the main flow
             }
           }
 
-          // After successful recording, move to next question
-          if (currentQuestionIndex < questions.length - 1) {
-            setCurrentQuestionIndex(prev => prev + 1);
-          } else {
-            setAllQuestionsAnswered(true);
-          }
+          // After successful recording, show confirmation
+          setShowConfirmation(true);
 
         } catch (error) {
           console.error('Processing error:', error);
           const errorMessage = error instanceof Error ? error.message : 'Speech processing failed';
           setError(`Failed to process speech: ${errorMessage}`);
         } finally {
-          setAudioChunks([]); // Clear the chunks after processing
-          setIsProcessing(false); // Hide loading indicator
+          setAudioChunks([]);
+          setIsProcessing(false);
           resolve();
         }
       }, { once: true });
@@ -338,7 +346,7 @@ export default function Home() {
     }
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsProcessing(true);
     setError(null);
@@ -346,24 +354,6 @@ export default function Home() {
     try {
       if (userRole === 'employer') {
         await fetchTopCandidates(answers.requirements);
-      } else {
-        // Existing resume generation code
-        const response = await fetch("/api/generate-resume", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ answers }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to generate resume");
-        }
-
-        const pdfBlob = await response.blob();
-        const url = window.URL.createObjectURL(pdfBlob);
-        window.open(url, '_blank');
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Operation failed';
@@ -374,10 +364,54 @@ export default function Home() {
   };
 
   const handleInputChange = (field: string, value: string) => {
-    setAnswers(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setTempAnswer(value);
+  };
+
+  const confirmAnswer = async () => {
+    try {
+      // Translate the answer before storing it
+      const translatedAnswer = await translateText(tempAnswer);
+      const formattedAnswer = formatText(translatedAnswer, questions[currentQuestionIndex].key);
+      
+      const updatedAnswers = {
+        ...answers,
+        [questions[currentQuestionIndex].key]: formattedAnswer
+      };
+      setAnswers(updatedAnswers);
+      
+      setShowConfirmation(false);
+      setTempAnswer('');
+      
+      // Check if this was the last question
+      if (currentQuestionIndex === questions.length - 1) {
+        setAllQuestionsAnswered(true);
+        // Send all answers to Google Sheets
+        try {
+          const sheetsResponse = await fetch('/api/update-sheets', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              formType: userRole,
+              ...updatedAnswers, // Send complete updated answers
+            }),
+          });
+
+          if (!sheetsResponse.ok) {
+            console.error('Failed to update Google Sheets:', await sheetsResponse.text());
+          }
+        } catch (sheetsError) {
+          console.error('Error updating Google Sheets:', sheetsError);
+        }
+      } else {
+        // Move to next question if not the last one
+        setCurrentQuestionIndex(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Error translating answer:', error);
+      setError('Failed to process answer');
+    }
   };
 
   const speakQuestion = async () => {
@@ -412,43 +446,8 @@ export default function Home() {
   };
 
   const handleNextClick = async () => {
-    const currentField = questions[currentQuestionIndex].key;
-    const currentAnswer = answers[currentField];
-    
-    if (!currentAnswer) return;
-
-    setIsProcessing(true);
-    try {
-      // Only send to Google Sheets if this is the last question
-      if (currentQuestionIndex === questions.length - 1) {
-        const sheetsResponse = await fetch('/api/update-sheets', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            formType: userRole,
-            ...answers,
-          }),
-        });
-
-        if (!sheetsResponse.ok) {
-          console.error('Failed to update Google Sheets:', await sheetsResponse.text());
-        }
-      }
-
-      // Move to next question
-      if (currentQuestionIndex < questions.length - 1) {
-        setCurrentQuestionIndex(prev => prev + 1);
-      } else {
-        setAllQuestionsAnswered(true);
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      setError('Failed to process answer');
-    } finally {
-      setIsProcessing(false);
-    }
+    if (!tempAnswer) return;
+    setShowConfirmation(true);
   };
 
   const founders = [
@@ -467,7 +466,7 @@ export default function Home() {
     // Add more founders as needed
   ];
 
-  const FoundersModal = () => {
+  const FoundersModal = (): JSX.Element | null => {
     if (!isFoundersModalOpen) return null;
 
     return (
@@ -494,8 +493,8 @@ export default function Home() {
                       src={founder.image}
                       alt={founder.name}
                       className="object-cover w-full h-full"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "https://www.gravatar.com/avatar/?d=mp";
+                      onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                        e.currentTarget.src = "https://www.gravatar.com/avatar/?d=mp";
                       }}
                     />
                   </div>
@@ -523,6 +522,107 @@ export default function Home() {
     );
   };
 
+  const WelcomeModal = (): JSX.Element | null => {
+    if (!showWelcomeModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-gray-800/90 rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="p-8 space-y-8">
+            <div className="flex justify-between items-center">
+              <div className="w-32 mx-auto flex justify-center">
+                <img src="/knotai.png" alt="KnotAI Logo" className="w-full h-full" />
+              </div>
+              <button
+                onClick={() => setShowWelcomeModal(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              <h2 className="text-3xl font-bold text-purple-300">Welcome to Mauka</h2>
+              
+              <div className="space-y-4 text-lg text-purple-100">
+                <p>
+                  Mauka is a revolutionary platform bridging the gap between employers and job seekers 
+                  across language barriers. We understand that talent knows no linguistic boundaries, 
+                  which is why we've created a seamless experience for both job seekers and employers.
+                </p>
+                
+                <div className="bg-purple-500/10 rounded-xl p-6 border border-purple-500/20">
+                  <h3 className="text-xl font-semibold text-purple-300 mb-3">Our Mission</h3>
+                  <p className="text-purple-100">
+                    We help employers get their next hire in days instead of weeks as job seekers from 
+                    diverse linguistic backgrounds register in minutes.
+                  </p>
+                </div>
+
+                <h3 className="text-xl font-semibold text-purple-300">What We Offer:</h3>
+                <ul className="space-y-3 list-disc list-inside">
+                  <li>Multi-language support for inclusive hiring</li>
+                  <li>Voice-enabled form filling for easier access</li>
+                  <li>Smart candidate matching for employers</li>
+                </ul>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowWelcomeModal(false)}
+              className="w-full bg-purple-500 hover:bg-purple-600 text-white rounded-xl py-4 px-6 
+                text-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+            >
+              Get Started
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Add type for the translations object
+  type TranslatedText = {
+    confirmationQuestion: string;
+    yes: string;
+    no: string;
+    response: string;
+    startOver: string;
+  };
+
+  type TranslationDictionary = {
+    [key: string]: TranslatedText;
+  };
+
+  const getTranslatedText: TranslationDictionary = {
+    'bn-IN': {
+      confirmationQuestion: 'এই উত্তরটি কি সঠিক?',
+      yes: 'হ্যাঁ, চালিয়ে যান',
+      no: 'না, সম্পাদনা করুন',
+      response: 'আপনার উত্তর',
+      startOver: 'নতুন করে শুরু করুন'
+    },
+    'hi-IN': {
+      confirmationQuestion: 'क्या यह जवाब सही है?',
+      yes: 'हाँ, जारी रखें',
+      no: 'नहीं, संपादित करें',
+      response: 'आपका जवाब',
+      startOver: 'फिर से शुरू करें'
+    },
+    'ml-IN': {
+      confirmationQuestion: 'ഈ ഉത്തരം ശരിയാണോ?',
+      yes: 'അതെ, തുടരുക',
+      no: 'അല്ല, എഡിറ്റ് ചെയ്യുക',
+      response: 'നിങ്ങളുടെ ഉത്തരം',
+      startOver: 'വീണ്ടും തുടങ്ങുക'
+    }
+  };
+
   if (isInitialLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-900 via-[#0f172a] to-gray-900 flex items-center justify-center">
@@ -540,43 +640,6 @@ export default function Home() {
     <>
       <div className="min-h-screen bg-gradient-to-b from-gray-900 via-[#0f172a] to-gray-900">
         <div className="max-w-3xl mx-auto p-8">
-          <div className="mb-6">
-            <div className="mt-6 bg-gray-800/50 backdrop-blur-sm rounded-xl shadow-lg shadow-black/20 
-              border border-gray-700/50 p-6 text-center">
-              <h2 className="text-2xl font-bold text-purple-300 mb-3">Our Mission</h2>
-              <p className="text-purple-100 text-lg leading-relaxed">
-                We help employers get their next hire in days instead of weeks as job seekers from diverse linguistic backgrounds 
-                register in minutes. 
-              </p>
-              
-              <button
-                onClick={() => setIsFoundersModalOpen(true)}
-                className="w-full mt-6 bg-gray-700/30 backdrop-blur-sm rounded-xl shadow-lg shadow-black/20 
-                  border border-gray-600/50 p-4 text-white hover:bg-gray-600/30 transition-all duration-200
-                  flex items-center justify-center gap-2 group"
-              >
-                <svg 
-                  className="w-5 h-5 transform transition-transform duration-200 group-hover:-translate-x-1" 
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                <span className="text-lg font-medium transform transition-all duration-200 group-hover:scale-105">
-Meet Us               </span>
-                <svg 
-                  className="w-5 h-5 transform transition-transform duration-200 group-hover:translate-x-1" 
-                  fill="none" 
-                  viewBox="0 0 24 24" 
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
           <main className="flex flex-col gap-10">
             {step === 'role-selection' ? (
               <div className="min-h-[40vh] flex items-center justify-center pt-4">
@@ -606,6 +669,22 @@ Meet Us               </span>
                       <span className="text-4xl mb-3">💼</span>
                       <span className="text-2xl font-bold text-white">Employer</span>
                       <span className="text-purple-200/80 mt-2">Hiring talent</span>
+                    </button>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => setIsFoundersModalOpen(true)}
+                      className="px-6 py-3 bg-purple-500/20 text-purple-200 rounded-xl
+                        hover:bg-purple-500/30 transition-all duration-200
+                        border border-purple-500/30 hover:border-purple-500/50
+                        flex items-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Learn About Us
                     </button>
                   </div>
                 </div>
@@ -697,58 +776,88 @@ Meet Us               </span>
                     <div className="flex flex-col items-center gap-6">
                       <input
                         type="text"
-                        value={answers[questions[currentQuestionIndex].key] || ''}
+                        value={tempAnswer}
                         onChange={(e) => handleInputChange(questions[currentQuestionIndex].key, e.target.value)}
                         className="w-full rounded-xl border-gray-700 bg-gray-900/50 p-4 text-gray-100 
                           focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder-gray-500"
                         placeholder="Type your answer..."
                       />
 
-                      <div className="flex gap-4 w-full">
-                        <button
-                          type="button"
-                          onClick={handleNextClick}
-                          disabled={isProcessing || !answers[questions[currentQuestionIndex].key]}
-                          className="w-full sm:w-auto px-8 py-4 bg-purple-500 hover:bg-purple-600 text-white 
-                            rounded-xl font-medium text-lg transition-all duration-200 ease-in-out 
-                            shadow-lg shadow-purple-500/20 hover:shadow-xl disabled:opacity-50
-                            border border-white/10 hover:border-white/20"
-                        >
-                          Next
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleRecordingClick}
-                          disabled={isProcessing}
-                          className={`
-                            w-full sm:w-auto px-8 py-4 rounded-xl font-medium text-lg
-                            transition-all duration-200 ease-in-out
-                            ${isRecording 
-                              ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'
-                              : 'bg-purple-500 hover:bg-purple-600 text-white shadow-purple-500/20'
-                            }
-                            disabled:opacity-50 shadow-lg hover:shadow-xl
-                            border border-white/10 hover:border-white/20
-                          `}
-                        >
-                          <div className="flex items-center justify-center gap-2">
-                            {isRecording ? (
-                              <>
-                                <span className="h-2 w-2 rounded-full bg-white animate-pulse"></span>
-                                Stop Recording
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                                </svg>
-                                Start Recording
-                              </>
-                            )}
+                      {showConfirmation ? (
+                        <div className="w-full space-y-4">
+                          <div className="bg-purple-500/20 rounded-xl p-4 border border-purple-500/30">
+                            <p className="text-purple-200 mb-2">
+                              {getTranslatedText[detectedLanguage]?.confirmationQuestion || 'Is this response correct?'}
+                            </p>
+                            <p className="text-white font-medium">
+                              {getTranslatedText[detectedLanguage]?.response || 'Your response'}: {tempAnswer}
+                            </p>
                           </div>
-                        </button>
-                      </div>
+                          
+                          <div className="flex gap-4">
+                            <button
+                              onClick={confirmAnswer}
+                              className="flex-1 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl
+                                transition-colors duration-200 font-medium"
+                            >
+                              {getTranslatedText[detectedLanguage]?.yes || 'Yes, Continue'}
+                            </button>
+                            <button
+                              onClick={() => setShowConfirmation(false)}
+                              className="flex-1 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl
+                                transition-colors duration-200 font-medium"
+                            >
+                              {getTranslatedText[detectedLanguage]?.no || 'No, Edit'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-4 w-full">
+                          <button
+                            type="button"
+                            onClick={handleNextClick}
+                            disabled={isProcessing || !tempAnswer}
+                            className="w-full sm:w-auto px-8 py-4 bg-purple-500 hover:bg-purple-600 text-white 
+                              rounded-xl font-medium text-lg transition-all duration-200 ease-in-out 
+                              shadow-lg shadow-purple-500/20 hover:shadow-xl disabled:opacity-50
+                              border border-white/10 hover:border-white/20"
+                          >
+                            Next
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleRecordingClick}
+                            disabled={isProcessing}
+                            className={`
+                              w-full sm:w-auto px-8 py-4 rounded-xl font-medium text-lg
+                              transition-all duration-200 ease-in-out
+                              ${isRecording 
+                                ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20'
+                                : 'bg-purple-500 hover:bg-purple-600 text-white shadow-purple-500/20'
+                              }
+                              disabled:opacity-50 shadow-lg hover:shadow-xl
+                              border border-white/10 hover:border-white/20
+                            `}
+                          >
+                            <div className="flex items-center justify-center gap-2">
+                              {isRecording ? (
+                                <>
+                                  <span className="h-2 w-2 rounded-full bg-white animate-pulse"></span>
+                                  Stop Recording
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                  </svg>
+                                  Start Recording
+                                </>
+                              )}
+                            </div>
+                          </button>
+                        </div>
+                      )}
 
                       {isProcessing && (
                         <div className="flex items-center gap-3 text-purple-200">
@@ -805,27 +914,29 @@ Meet Us               </span>
                           />
                         </div>
                         <div className="flex flex-col sm:flex-row gap-4">
-                          <button
-                            type="submit"
-                            disabled={isProcessing}
-                            className="w-full sm:w-auto px-8 py-4 bg-purple-500 hover:bg-purple-600 text-white 
-                              rounded-xl font-medium text-lg transition-all duration-200 ease-in-out 
-                              shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/30 
-                              disabled:opacity-50 disabled:hover:bg-purple-500
-                              border border-white/10 hover:border-white/20"
-                          >
-                            {isProcessing ? (
-                              <div className="flex items-center justify-center gap-2">
-                                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                </svg>
-                                <span>{userRole === 'employer' ? 'Finding Matches...' : 'Generating...'}</span>
-                              </div>
-                            ) : (
-                              userRole === 'employer' ? "Find Matching Candidates" : "Generate Resume"
-                            )}
-                          </button>
+                          {userRole === 'employer' && (
+                            <button
+                              type="submit"
+                              disabled={isProcessing}
+                              className="w-full sm:w-auto px-8 py-4 bg-purple-500 hover:bg-purple-600 text-white 
+                                rounded-xl font-medium text-lg transition-all duration-200 ease-in-out 
+                                shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/30 
+                                disabled:opacity-50 disabled:hover:bg-purple-500
+                                border border-white/10 hover:border-white/20"
+                            >
+                              {isProcessing ? (
+                                <div className="flex items-center justify-center gap-2">
+                                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                  </svg>
+                                  <span>Finding Matches...</span>
+                                </div>
+                              ) : (
+                                "Find Matching Candidates"
+                              )}
+                            </button>
+                          )}
                           
                           <button
                             type="button"
@@ -842,7 +953,7 @@ Meet Us               </span>
                               shadow-lg shadow-gray-500/20 hover:shadow-xl hover:shadow-gray-500/30 
                               border border-white/10 hover:border-white/20"
                           >
-                            Start Over
+                            {detectedLanguage ? getTranslatedText[detectedLanguage]?.startOver : 'Start Over'}
                           </button>
                         </div>
                       </form>
@@ -892,6 +1003,7 @@ Meet Us               </span>
           </footer>
         </div>
       </div>
+      <WelcomeModal />
       <FoundersModal />
     </>
   );
