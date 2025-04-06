@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent, useEffect } from "react";
+import { useState, useEffect } from "react";
 
 
 export default function Home() {
@@ -550,7 +550,7 @@ export default function Home() {
                 <p>
                   Mauka is a revolutionary platform bridging the gap between employers and job seekers 
                   across language barriers. We understand that talent knows no linguistic boundaries, 
-                  which is why we've created a seamless experience for both job seekers and employers.
+                  which is why we have created a seamless experience for both job seekers and employers.
                 </p>
                 
                 <div className="bg-purple-500/10 rounded-xl p-6 border border-purple-500/20">
