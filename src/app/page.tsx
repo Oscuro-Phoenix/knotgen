@@ -615,7 +615,7 @@ export default function Home() {
       startOver: 'फिर से शुरू करें'
     },
     'ml-IN': {
-      confirmationQuestion: 'ഈ ഉത്തരം ശരിയാണോ?',
+      confirmationQuestion: 'ഈ উত্তরം ശരിയാണോ?',
       yes: 'അതെ, തുടരുക',
       no: 'അല്ല, എഡിറ്റ് ചെയ്യുക',
       response: 'നിങ്ങളുടെ ഉത്തരം',
